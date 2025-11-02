@@ -1,0 +1,268 @@
+<!doctype html>
+<html lang="en">
+<head>
+<link rel="stylesheet" href="style.css">
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Persephone — Count the Flowers</title>
+  <style>
+    :root{--bg1:#fffbf0;--bg2:#d2f8d2;--accent:#ff6b9a}
+    html,body{height:100%;margin:0;font-family:system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial;}
+    .stage{
+      height:100%;display:flex;align-items:center;justify-content:center;position:relative;overflow:hidden;background:linear-gradient(180deg,var(--bg1),var(--bg2));transition:background 1s linear}
+    .meadow{width:100%;height:100%;position:relative}
+    .flower{
+      position:absolute;cursor:pointer;user-select:none;transform-origin:center center;transition:transform .18s ease,opacity .3s ease;touch-action:manipulation
+    }
+    .flower .hit{position:absolute;inset:-12px;border-radius:999px}
+    .flower svg{width:88px;height:88px;display:block}
+    .flower:active{transform:scale(.92)}
+    .hud{position:fixed;left:18px;top:18px;background:rgba(255,255,255,0.85);backdrop-filter:blur(6px);padding:10px 14px;border-radius:12px;box-shadow:0 6px 18px rgba(0,0,0,.12)}
+    .hud .count{font-size:20px;font-weight:700}
+    .line{position:fixed;left:50%;transform:translateX(-50%);bottom:28px;background:rgba(255,255,255,0.75);padding:12px 18px;border-radius:999px;font-size:16px}
+    .shadow-overlay{position:absolute;inset:0;pointer-events:none;transition:background 1s linear}
+    .persephone{position:absolute;left:50%;bottom:6%;transform:translateX(-50%);width:120px;height:220px;display:flex;align-items:flex-end;justify-content:center;transition:transform 1s ease}
+    .silhouette{width:60px;height:140px;background:linear-gradient(180deg,#ffe3f0,#fcc0d9);border-radius:40px;border:6px solid rgba(0,0,0,0.03);box-shadow:0 10px 30px rgba(0,0,0,0.12) inset}
+    .petals{position:absolute;left:50%;top:-10px;transform:translateX(-50%);font-size:28px}
+    .abducted{animation:descend 1.2s forwards}
+    @keyframes descend{to{transform:translateX(-50%) translateY(420px) scale(.6);opacity:0}}
+    .vignette{position:absolute;inset:0;pointer-events:none;background:radial-gradient(circle at 50% 20%, rgba(0,0,0,0) 40%, rgba(0,0,0,0.12) 70%, rgba(0,0,0,0.35) 100%);opacity:0;transition:opacity 1s}
+    .final-black{position:absolute;inset:0;background:#000;opacity:0;transition:opacity 1s}
+    .replay{position:fixed;right:18px;top:18px;background:#fff;padding:8px 12px;border-radius:10px;cursor:pointer;box-shadow:0 8px 18px rgba(0,0,0,.12)}
+    .credits{position:fixed;right:18px;bottom:18px;background:rgba(255,255,255,0.8);padding:8px 10px;border-radius:8px;font-size:12px}
+    .debug{position:fixed;left:18px;bottom:18px;background:rgba(0,0,0,0.6);color:#fff;padding:6px 8px;border-radius:6px;font-size:12px}
+  </style>
+</head>
+<body>
+  <div class="stage" id="stage">
+    <div class="meadow" id="meadow"></div>
+
+    <div class="persephone" id="persephone">
+      <img id="persephone" src="persephone.jpg" alt="Persephone"/>
+    </div>
+
+    <div class="shadow-overlay" id="shadow"></div>
+    <div class="vignette" id="vignette"></div>
+    <div class="final-black" id="black"></div>
+
+    <div class="hud">
+      <div class="count">Flowers picked: <span id="counter">0</span>/<span id="goal">12</span></div>
+    </div>
+
+    <div class="line" id="line">Press Space to Start (PC)/Tap to Start (Mobile)</div>
+
+    <div class="replay" id="replay" style="display:none">Play again</div>
+    <div class="credits">Persephone Flower Journey</div>
+    <div class="debug" id="debug" style="display:none">debug</div>
+  </div>
+
+  <script>
+    // Configuration
+    const TOTAL = 12; // how many flowers appear and how many to pick
+    const meadow = document.getElementById('meadow');
+    const counter = document.getElementById('counter');
+    const goal = document.getElementById('goal');
+    const line = document.getElementById('line');
+    const shadow = document.getElementById('shadow');
+    const vignette = document.getElementById('vignette');
+    const black = document.getElementById('black');
+    const persephone = document.getElementById('persephone');
+    const replay = document.getElementById('replay');
+    const debug = document.getElementById('debug');
+    goal.textContent = TOTAL;
+
+    let picked = 0;
+    let poetry = [
+      "One for the morning that smelled of honey.",
+      "Two for the laughter that braided the breeze.",
+      "Three for the dance of light on petal-edge.",
+      "Four for the secret humming in the grass.",
+      "Five for the warmth that cradled her feet.",
+      "Six for the hummingbird’s bright impatience.",
+      "Seven for the breath before the hush.",
+      "Eight for the shadow that learning starts to cast.",
+      "Nine for a pomegranate seed glinting like a lie.",
+      "Ten for the hush between footsteps.",
+      "Eleven for the hand that did not ask.",
+      "Twelve — the world tilts."
+    ];
+
+    // create simple flower HTML element
+    function makeFlower(id){
+      const el = document.createElement('div');
+      el.className = 'flower';
+      el.dataset.id = id;
+      // random position
+      const pad = 6; // padding in percent
+      const left = Math.random() * (100 - pad*2) + pad;
+      const top = Math.random() * (70 - pad*2) + 10; // keep lower area free for Persephone
+      el.style.left = left + '%';
+      el.style.top = top + '%';
+      el.innerHTML = `
+        <div class="hit" aria-hidden="true"></div>
+        <svg viewBox="0 0 64 64" aria-hidden="true" focusable="false">
+          <g transform="translate(32,32)">
+            <circle r="6" fill="#ffd97a"></circle>
+            <g transform="rotate(0)">
+              <path d="M0,-18 C6,-18 10,-14 12,-8 C10,-4 6,-2 0,0 C-6,-2 -10,-4 -12,-8 C-10,-14 -6,-18 0,-18" fill="#ff6b9a"/>
+            </g>
+            <g transform="rotate(45)"><path d="M0,-18 C6,-18 10,-14 12,-8 C10,-4 6,-2 0,0 C-6,-2 -10,-4 -12,-8 C-10,-14 -6,-18 0,-18" fill="#ff9bb8"/></g>
+            <g transform="rotate(90)"><path d="M0,-18 C6,-18 10,-14 12,-8 C10,-4 6,-2 0,0 C-6,-2 -10,-4 -12,-8 C-10,-14 -6,-18 0,-18" fill="#ffc8d6"/></g>
+            <g transform="rotate(135)"><path d="M0,-18 C6,-18 10,-14 12,-8 C10,-4 6,-2 0,0 C-6,-2 -10,-4 -12,-8 C-10,-14 -6,-18 0,-18" fill="#ff8fb0"/></g>
+          </g>
+        </svg>`;
+      return el;
+    }
+
+    function spawnFlowers(){
+      meadow.innerHTML = '';
+      for(let i=0;i<TOTAL;i++){
+        const f = makeFlower(i);
+        meadow.appendChild(f);
+        // add both click and touch handlers for compatibility
+        f.addEventListener('click', onPick);
+        f.addEventListener('touchstart', onPick, {passive:true});
+      }
+    }
+
+    // simple sound using WebAudio API (works after user gesture)
+    const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    function chime(freq, length=0.18, type='sine'){
+      try{
+        const o = audioCtx.createOscillator();
+        const g = audioCtx.createGain();
+        o.type = type; o.frequency.value = freq;
+        g.gain.setValueAtTime(0.0001, audioCtx.currentTime);
+        g.gain.exponentialRampToValueAtTime(0.08, audioCtx.currentTime + 0.01);
+        g.gain.exponentialRampToValueAtTime(0.0001, audioCtx.currentTime + length);
+        o.connect(g); g.connect(audioCtx.destination);
+        o.start(); o.stop(audioCtx.currentTime + length + 0.02);
+      }catch(err){console.warn('Audio error',err)}
+    }
+
+    function onPick(e){
+      // ensure audio unlocked on first real interaction
+      try{ if(audioCtx.state === 'suspended') audioCtx.resume(); }catch{};
+
+      // prefer the element that has .flower
+      let el = e.currentTarget;
+      if(!el || !el.classList.contains('flower')){
+        el = e.target.closest('.flower');
+      }
+      if(!el) return;
+
+      // prevent double pick
+      if(el.dataset.picked) return;
+      el.dataset.picked = '1';
+      picked += 1;
+      counter.textContent = picked;
+      el.style.transform = 'scale(.6) rotate(-10deg)';
+      el.style.opacity = '0.25';
+      // show short poem line
+      line.textContent = poetry[Math.min(picked-1, poetry.length-1)];
+      // chime
+      chime(620 - picked*8, 0.12, 'sine');
+
+      // gentle atmosphere change as count increases
+      if(picked >= Math.ceil(TOTAL/3)){
+        vignette.style.opacity = '0.18';
+      }
+      if(picked >= Math.ceil(TOTAL*0.6)){
+        // darker gradient
+        document.documentElement.style.setProperty('--bg1', '#fff5f7');
+        document.documentElement.style.setProperty('--bg2', '#cfe7d0');
+        shadow.style.background = 'linear-gradient(180deg, rgba(0,0,0,0) 40%, rgba(0,0,0,0.06) 70%, rgba(0,0,0,0.12) 100%)';
+      }
+
+      // last pick triggers abduction
+      if(picked === TOTAL){
+        triggerAbduction();
+      }
+    }
+
+    function triggerAbduction(){
+      // subtle rumble
+      try{
+        const o = audioCtx.createOscillator();
+        const g = audioCtx.createGain();
+        o.type = 'sine'; o.frequency.value = 80;
+        g.gain.value = 0.0001;
+        o.connect(g); g.connect(audioCtx.destination);
+        g.gain.exponentialRampToValueAtTime(0.12, audioCtx.currentTime + 0.02);
+        g.gain.exponentialRampToValueAtTime(0.0001, audioCtx.currentTime + 1.2);
+        o.start(); o.stop(audioCtx.currentTime + 1.25);
+      }catch(e){console.warn('abduction audio failed',e)}
+
+      // visual: tilt and descend
+      persephone.classList.add('abducted');
+      // bloom of darkness
+      black.style.opacity = '0';
+      setTimeout(()=>{ black.style.opacity = '1'; }, 900);
+      line.textContent = 'The ground opens. Hades comes. — She is taken.';
+
+      // add dramatic shadow
+      vignette.style.opacity = '0.85';
+
+      // show replay
+      setTimeout(()=>{ replay.style.display = 'block'; },1400);
+    }
+
+    // replay logic
+    replay.addEventListener('click',()=>{ resetScene(); });
+
+    function resetScene(){
+      picked = 0; counter.textContent = '0';
+      line.textContent = 'Click or tap the flowers to pick them — press Space to pick a random one.';
+      vignette.style.opacity = '0';
+      black.style.opacity = '0';
+      persephone.classList.remove('abducted');
+      document.documentElement.style.setProperty('--bg1','#fffbf0');
+      document.documentElement.style.setProperty('--bg2','#d2f8d2');
+      shadow.style.background = 'none';
+      replay.style.display = 'none';
+      spawnFlowers();
+    }
+
+    // start
+    spawnFlowers();
+
+    // accessibility: let keyboard press pick a random visible flower
+    window.addEventListener('keydown',(e)=>{
+      if(e.key === ' '){
+        e.preventDefault();
+        const unpicked = Array.from(document.querySelectorAll('.flower')).filter(f=>!f.dataset.picked);
+        if(unpicked.length) unpicked[Math.floor(Math.random()*unpicked.length)].click();
+      }
+    });
+
+    document.querySelectorAll(".flower").forEach(flower => {
+        flower.addEventListener("click", () => {
+        const persephone = document.getElementById("persephone");
+        persephone.style.transform = "translateX(-50%) scale(1.1)";
+        setTimeout(() => persephone.style.transform = "translateX(-50%) scale(1)", 200);
+        });
+    });
+
+
+    // user gesture required to unlock audio on some browsers — start audio context on first interaction
+    function ensureAudioUnlocked(){
+      try{ if(audioCtx.state === 'suspended') audioCtx.resume(); }catch{}
+      window.removeEventListener('click', ensureAudioUnlocked);
+      window.removeEventListener('keydown', ensureAudioUnlocked);
+    }
+    window.addEventListener('click', ensureAudioUnlocked);
+    window.addEventListener('keydown', ensureAudioUnlocked);
+
+    // basic troubleshooting hints shown to user if nothing works
+    setTimeout(()=>{
+      // if no flowers or clicks seem to work, show debug hints
+      const anyFlowers = document.querySelectorAll('.flower').length;
+      if(!anyFlowers){
+        debug.style.display = 'block';
+        debug.textContent = 'No flowers spawned — make sure JavaScript is enabled.';
+      }
+    },800);
+
+  </script>
+</body>
+</html>

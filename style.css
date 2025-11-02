@@ -1,0 +1,11 @@
+#persephone {
+  position: absolute;
+  bottom: 20px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 150px;
+  height: auto;
+  transition: transform 0.5s ease;
+  border-radius: 50px;
+  border: 1px solid rgb(0, 0, 0);
+}
