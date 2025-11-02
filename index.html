@@ -48,8 +48,8 @@
     <div class="hud">
       <div class="count">Flowers picked: <span id="counter">0</span>/<span id="goal">12</span></div>
     </div>
-
-    <div class="line" id="line">Press Space to Start (PC)/Tap to Start (Mobile)</div>
+    <div id="fate-bubble" title="Let fate choose...">☁</div>
+    <div class="line" id="line">Click the Cloud to Start</div>
 
     <div class="replay" id="replay" style="display:none">Play again</div>
     <div class="credits">Persephone Flower Journey</div>
@@ -227,12 +227,16 @@
     spawnFlowers();
 
     // accessibility: let keyboard press pick a random visible flower
-    window.addEventListener('keydown',(e)=>{
-      if(e.key === ' '){
-        e.preventDefault();
+    document.getElementById('fate-bubble').addEventListener('click', () => {
         const unpicked = Array.from(document.querySelectorAll('.flower')).filter(f=>!f.dataset.picked);
-        if(unpicked.length) unpicked[Math.floor(Math.random()*unpicked.length)].click();
-      }
+        if(unpicked.length) {
+            const chosen = unpicked[Math.floor(Math.random()*unpicked.length)];
+            chosen.click();
+            // gentle bubble pulse
+            const bubble = document.getElementById('fate-bubble');
+            bubble.style.transform = 'scale(1.2)';
+            setTimeout(() => bubble.style.transform = 'scale(1)', 200);
+        }
     });
 
     document.querySelectorAll(".flower").forEach(flower => {
